@@ -1,4 +1,4 @@
-/* Copyright JsonAsAsset Contributors 2024-2026 */
+/* Copyright JsonAsAsset Contributors 2024-2025 */
 
 #pragma once
 
@@ -7,13 +7,16 @@
 #include "PhysicsEngine/PhysicsAsset.h"
 
 /* SkeletalBodySetup is a separate file on UE5.5+ */
-#if ENGINE_UE5 && ENGINE_MINOR_VERSION > 4
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION > 4
 #include "PhysicsEngine/SkeletalBodySetup.h"
 #endif
 
 class IPhysicsAssetImporter : public IImporter {
 public:
-	virtual UObject* CreateAsset(UObject* CreatedAsset = nullptr) override;
+	IPhysicsAssetImporter(const FString& FileName, const FString& FilePath, const TSharedPtr<FJsonObject>& JsonObject, UPackage* Package, UPackage* OutermostPkg, const TArray<TSharedPtr<FJsonValue>>& AllJsonObjects, UClass* AssetClass):
+		IImporter(FileName, FilePath, JsonObject, Package, OutermostPkg, AllJsonObjects, AssetClass) {
+	}
+	
 	virtual bool Import() override;
 
 	static USkeletalBodySetup* CreateNewBody(UPhysicsAsset* PhysAsset, FName ExportName, FName BoneName);

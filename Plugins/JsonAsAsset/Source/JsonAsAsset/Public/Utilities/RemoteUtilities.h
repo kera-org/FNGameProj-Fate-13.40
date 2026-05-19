@@ -1,39 +1,17 @@
-/* Copyright JsonAsAsset Contributors 2024-2026 */
+/* Copyright JsonAsAsset Contributors 2024-2025 */
 
 #pragma once
 
-#include "Utilities/Compatibility.h"
+#include "Utilities/AppStyleCompatibility.h"
+
 #include "Interfaces/IHttpRequest.h"
 #include "Interfaces/IHttpResponse.h"
 
-class JSONASASSET_API FRemoteUtilities {
+class FRemoteUtilities {
 public:
-	static TSharedPtr<IHttpResponse, ESPMode::ThreadSafe> ExecuteRequestSync(
-
-		/* Different type declarations for HttpRequest on UE5 */
 #if ENGINE_UE5
-		TSharedRef<IHttpRequest> HttpRequest,
+	static TSharedPtr<IHttpResponse, ESPMode::ThreadSafe> ExecuteRequestSync(TSharedRef<IHttpRequest> HttpRequest, float LoopDelay = 0.1);
 #else
-		const TSharedRef<IHttpRequest, ESPMode::ThreadSafe>& HttpRequest,
+	static TSharedPtr<IHttpResponse, ESPMode::ThreadSafe> ExecuteRequestSync(const TSharedRef<IHttpRequest, ESPMode::ThreadSafe>& HttpRequest, float LoopDelay = 0.1);
 #endif
-		/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
-		
-		float LoopDelay = 0.02);
-
-	static void ExecuteRequestAsync(
-
-#if ENGINE_UE5
-		TSharedRef<IHttpRequest> HttpRequest,
-#else
-		const TSharedRef<IHttpRequest, ESPMode::ThreadSafe>& HttpRequest,
-#endif
-
-		TFunction<void(
-#if ENGINE_UE5
-			TSharedPtr<IHttpResponse>
-#else
-			TSharedPtr<IHttpResponse, ESPMode::ThreadSafe>
-#endif
-		)> OnComplete
-	);
 };

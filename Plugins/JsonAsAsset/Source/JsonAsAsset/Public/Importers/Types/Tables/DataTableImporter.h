@@ -1,4 +1,4 @@
-/* Copyright JsonAsAsset Contributors 2024-2026 */
+/* Copyright JsonAsAsset Contributors 2024-2025 */
 
 #pragma once
 
@@ -7,9 +7,12 @@
 
 class IDataTableImporter : public IImporter {
 public:
-	using FTableRowMap = TMap<FName, TSharedPtr<FStructOnScope>>;
+	using FTableRowMap = TMap<FName, TSharedPtr<class FStructOnScope>>;
 
-	virtual UObject* CreateAsset(UObject* CreatedAsset) override;
+	IDataTableImporter(const FString& FileName, const FString& FilePath, const TSharedPtr<FJsonObject>& JsonObject, UPackage* Package, UPackage* OutermostPkg, const TArray<TSharedPtr<FJsonValue>>& AllJsonObjects, UClass* AssetClass):
+		IImporter(FileName, FilePath, JsonObject, Package, OutermostPkg, AllJsonObjects, AssetClass) {
+	}
+
 	virtual bool Import() override;
 };
 

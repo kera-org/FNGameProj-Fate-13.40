@@ -1,20 +1,16 @@
-/* Copyright JsonAsAsset Contributors 2024-2026 */
+/* Copyright JsonAsAsset Contributors 2024-2025 */
 
 #include "Importers/Types/Tables/StringTableImporter.h"
 
 #include "Internationalization/StringTable.h"
 #include "Internationalization/StringTableCore.h"
 
-UObject* IStringTableImporter::CreateAsset(UObject* CreatedAsset) {
-	return IImporter::CreateAsset(NewObject<UStringTable>(GetPackage(), UStringTable::StaticClass(), *GetAssetName(), RF_Public | RF_Standalone));
-}
-
 bool IStringTableImporter::Import() {
-	/* Create StringTable */
-	UStringTable* StringTable = Create<UStringTable>();
+	/* Create StringTable from Package */
+	UStringTable* StringTable = NewObject<UStringTable>(Package, UStringTable::StaticClass(), *FileName, RF_Public | RF_Standalone);
 
-	if (GetAssetData()->HasField(TEXT("StringTable"))) {
-		const TSharedPtr<FJsonObject> StringTableData = GetAssetData()->GetObjectField(TEXT("StringTable"));
+	if (AssetData->HasField(TEXT("StringTable"))) {
+		const TSharedPtr<FJsonObject> StringTableData = AssetData->GetObjectField(TEXT("StringTable"));
 		const FStringTableRef MutableStringTable = StringTable->GetMutableStringTable();
 
 		/* Set Table Namespace */

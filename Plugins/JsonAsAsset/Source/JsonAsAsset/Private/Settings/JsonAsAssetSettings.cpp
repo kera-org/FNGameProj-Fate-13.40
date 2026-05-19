@@ -1,17 +1,22 @@
-/* Copyright JsonAsAsset Contributors 2024-2026 */
+/* Copyright JsonAsAsset Contributors 2024-2025 */
 
 #include "Settings/JsonAsAssetSettings.h"
-#include "Modules/Metadata.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/SBoxPanel.h"
 
-FName GJsonAsAssetSettingsCategoryName = FName("General");
+#define LOCTEXT_NAMESPACE "JsonAsAsset"
 
-UJsonAsAssetSettings::UJsonAsAssetSettings() {
-	CategoryName = GJsonAsAssetSettingsCategoryName;
-	SectionName = GJsonAsAssetName;
+UJsonAsAssetSettings::UJsonAsAssetSettings():
+	/* Default initializers */
+	bEnableLocalFetch(false), 
+	UnrealVersion()
+{
+	CategoryName = TEXT("Plugins");
+	SectionName = TEXT("JsonAsAsset");
 }
 
 FText UJsonAsAssetSettings::GetSectionText() const {
-	return FText::FromString(GJsonAsAssetName.ToString());
+	return LOCTEXT("SettingsDisplayName", "JsonAsAsset");
 }
+
+#undef LOCTEXT_NAMESPACE

@@ -1,22 +1,15 @@
-﻿/* Copyright JsonAsAsset Contributors 2024-2026 */
+﻿/* Copyright JsonAsAsset Contributors 2024-2025 */
 
 #include "Importers/Types/Curves/CurveVectorImporter.h"
 #include "Factories/CurveFactory.h"
 #include "Curves/CurveVector.h"
-#include "Utilities/JsonUtilities.h"
-
-UObject* ICurveVectorImporter::CreateAsset(UObject* CreatedAsset) {
-	UCurveVectorFactory* CurveVectorFactory = NewObject<UCurveVectorFactory>();
-	UCurveVector* CurveVector = Cast<UCurveVector>(CurveVectorFactory->FactoryCreateNew(UCurveVector::StaticClass(), GetPackage(), *GetAssetName(), RF_Standalone | RF_Public, nullptr, GWarn));
-
-	return IImporter::CreateAsset(CurveVector);
-}
 
 bool ICurveVectorImporter::Import() {
 	/* Array of containers */
-	TArray<TSharedPtr<FJsonValue>> FloatCurves = GetAssetData()->GetArrayField(TEXT("FloatCurves"));
+	TArray<TSharedPtr<FJsonValue>> FloatCurves = AssetData->GetArrayField(TEXT("FloatCurves"));
 
-	UCurveVector* CurveVectorAsset = Create<UCurveVector>();
+	UCurveVectorFactory* CurveVectorFactory = NewObject<UCurveVectorFactory>();
+	UCurveVector* CurveVectorAsset = Cast<UCurveVector>(CurveVectorFactory->FactoryCreateNew(UCurveVector::StaticClass(), OutermostPkg, *FileName, RF_Standalone | RF_Public, nullptr, GWarn));
 
 	/* For each container, get keys */
 	for (int i = 0; i < FloatCurves.Num(); i++) {

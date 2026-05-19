@@ -1,13 +1,13 @@
 {
 	"FileVersion": 3,
 	"Version": 1,
-	"VersionName": "1.4.1",
+	"VersionName": "1.3.7",
 	"FriendlyName": "JsonAsAsset",
-	"Description": "Powerful Unreal Engine Plugin that imports assets from FModel",
-	"Category": "Tools",
-	"CreatedBy": "JsonAsAsset",
+	"Description": "A user-friendly Unreal Engine plugin designed to import assets from packaged games through JSON files.",
+	"Category": "Asset Import",
+	"CreatedBy": "Tector, GMatrixGames",
 	"CreatedByURL": "https://github.com/JsonAsAsset",
-	"DocsURL": "",
+	"DocsURL": "https://github.com/JsonAsAsset/JsonAsAsset",
 	"MarketplaceURL": "",
 	"SupportURL": "",
 	"CanContainContent": false,
@@ -18,7 +18,7 @@
 		{
 			"Name": "JsonAsAsset",
 			"Type": "Editor",
-			"LoadingPhase": "PostDefault",
+			"LoadingPhase": "Default",
 			"PlatformDenyList": [
 				"Android"
 			]

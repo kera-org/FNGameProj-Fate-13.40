@@ -1,22 +1,25 @@
-/* Copyright JsonAsAsset Contributors 2024-2026 */
+/* Copyright JsonAsAsset Contributors 2024-2025 */
 
 #include "Modules/UI/StyleModule.h"
 #include "Styling/SlateStyleRegistry.h"
 #include "Interfaces/IPluginManager.h"
-#include "Modules/Metadata.h"
-#include "Utilities/EngineUtilities.h"
 
 #define IMAGE_BRUSH(RelativePath, ...) FSlateImageBrush(Style->RootToContentDir(RelativePath, TEXT(".png")), __VA_ARGS__)
 
 const FVector2D Icon40x40(40, 40);
+const FVector2D Icon80x80(40, 40);
 
 TSharedRef<FSlateStyleSet> FJsonAsAssetStyle::Create() {
 	TSharedRef<FSlateStyleSet> Style = MakeShareable(new FSlateStyleSet("JsonAsAssetStyle"));
-	Style->SetContentRoot(FJMetadata::Plugin->GetBaseDir() / TEXT("Resources"));
+	Style->SetContentRoot(IPluginManager::Get().FindPlugin("JsonAsAsset")->GetBaseDir() / TEXT("Resources"));
 
-	Style->Set("Toolbar.Icon", new IMAGE_BRUSH(TEXT("./Toolbar/40px"), Icon40x40));
-	Style->Set("Toolbar.Heart", new IMAGE_BRUSH(TEXT("./Toolbar/Heart_40px"), Icon40x40));
-	Style->Set("Toolbar.Cloud", new IMAGE_BRUSH(TEXT("./Toolbar/Cloud_40px"), Icon40x40));
+	/* Toolbar ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
+	Style->Set("JsonAsAsset.Toolbar.Icon", new IMAGE_BRUSH(TEXT("./Toolbar/40px"), Icon40x40));
+	Style->Set("JsonAsAsset.Toolbar.Icon.Warning", new IMAGE_BRUSH(TEXT("./Toolbar/40px_Warning"), Icon40x40));
+
+	/* AboutJsonAsAsset Widget ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
+	Style->Set("JsonAsAsset.FModel.Icon", new IMAGE_BRUSH(TEXT("./About/FModel"), Icon80x80));
+	Style->Set("JsonAsAsset.Github.Icon", new IMAGE_BRUSH(TEXT("./About/Github"), Icon40x40));
 
 	return Style;
 }

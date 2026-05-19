@@ -1,4 +1,4 @@
-﻿/* Copyright JsonAsAsset Contributors 2024-2026 */
+﻿/* Copyright JsonAsAsset Contributors 2024-2025 */
 
 #pragma once
 
@@ -6,7 +6,10 @@
 
 class IBlendSpaceImporter : public IImporter {
 public:
-	virtual UObject* CreateAsset(UObject* CreatedAsset) override;
+	IBlendSpaceImporter(const FString& FileName, const FString& FilePath, const TSharedPtr<FJsonObject>& JsonObject, UPackage* Package, UPackage* OutermostPkg, const TArray<TSharedPtr<FJsonValue>>& AllJsonObjects, UClass* AssetClass):
+		IImporter(FileName, FilePath, JsonObject, Package, OutermostPkg, AllJsonObjects, AssetClass) {
+	}
+
 	virtual bool Import() override;
 };
 
@@ -16,4 +19,4 @@ REGISTER_IMPORTER(IBlendSpaceImporter, (TArray<FString>{
 
 	"AimOffsetBlendSpace",
 	"AimOffsetBlendSpace1D"
-}), TEXT("Animation Assets"));
+}), "Animation Assets");

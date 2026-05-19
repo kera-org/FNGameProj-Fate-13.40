@@ -1,19 +1,14 @@
-﻿/* Copyright JsonAsAsset Contributors 2024-2026 */
+﻿/* Copyright JsonAsAsset Contributors 2024-2025 */
 
 #include "Importers/Types/Curves/CurveLinearColorAtlasImporter.h"
 #include "Curves/CurveLinearColorAtlas.h"
 #include "Curves/CurveLinearColor.h"
 
-UObject* ICurveLinearColorAtlasImporter::CreateAsset(UObject* CreatedAsset) {
-	return IImporter::CreateAsset(NewObject<UCurveLinearColorAtlas>(GetPackage(), UCurveLinearColorAtlas::StaticClass(), *GetAssetName(), RF_Public | RF_Standalone));
-}
-
 bool ICurveLinearColorAtlasImporter::Import() {
 	float Width = 256;
 	float Height = 256;
 
-	UCurveLinearColorAtlas* Object = Create<UCurveLinearColorAtlas>();
-#if !UE5_6_BEYOND
+	UCurveLinearColorAtlas* Object = NewObject<UCurveLinearColorAtlas>(Package, UCurveLinearColorAtlas::StaticClass(), *FileName, RF_Public | RF_Standalone);
 	Object->Source.Init(Width, Height, 1, 1, TSF_RGBA16F);
 	const int32 TextureDataSize = Object->Source.CalcMipSize(0);
 	Object->SrcData.AddUninitialized(TextureDataSize);
@@ -30,33 +25,29 @@ bool ICurveLinearColorAtlasImporter::Import() {
 	Object->UpdateResource();
 
 	bool bHasAnyDirtyTextures = false;
-	if (GetAssetData()->TryGetBoolField(TEXT("bHasAnyDirtyTextures"), bHasAnyDirtyTextures)) {
+	if (AssetData->TryGetBoolField(TEXT("bHasAnyDirtyTextures"), bHasAnyDirtyTextures)) {
 		Object->bHasAnyDirtyTextures = bHasAnyDirtyTextures;
 	}
 
 	bool bIsDirty = false;
-	if (GetAssetData()->TryGetBoolField(TEXT("bIsDirty"), bIsDirty)) {
+	if (AssetData->TryGetBoolField(TEXT("bIsDirty"), bIsDirty)) {
 		Object->bIsDirty = bIsDirty;
 	}
 
 	bool bShowDebugColorsForNullGradients = false;
-	if (GetAssetData()->TryGetBoolField(TEXT("bShowDebugColorsForNullGradients"), bShowDebugColorsForNullGradients)) {
+	if (AssetData->TryGetBoolField(TEXT("bShowDebugColorsForNullGradients"), bShowDebugColorsForNullGradients)) {
 		Object->bShowDebugColorsForNullGradients = bShowDebugColorsForNullGradients;
 	}
 
 	bool bSquareResolution = false;
-#else
-	Object->TextureSize = FMath::Max(Width,2);
-	Object->UpdateTextures();
-#endif
-	
-#if !UE4_27_ONLY_BELOW && !UE5_6_BEYOND
-	if (GetAssetData()->TryGetBoolField(TEXT("bSquareResolution"), bSquareResolution)) {
+
+#if !UE4_27_ONLY_BELOW
+	if (AssetData->TryGetBoolField(TEXT("bSquareResolution"), bSquareResolution)) {
 		Object->bSquareResolution = bSquareResolution;
 	}
 #endif
 
-#if ENGINE_UE5
+#if ENGINE_MAJOR_VERSION == 5
 	float TextureSize = 0.0f;
 	float TextureHeight = 0.0f;
 #else
@@ -64,12 +55,12 @@ bool ICurveLinearColorAtlasImporter::Import() {
 	double TextureHeight = 0.0f;
 #endif
 	
-	if (GetAssetData()->TryGetNumberField(TEXT("TextureSize"), TextureSize)) {
+	if (AssetData->TryGetNumberField(TEXT("TextureSize"), TextureSize)) {
 		Object->TextureSize = TextureSize;
 	}
 
-#if !UE4_27_ONLY_BELOW && !UE5_6_BEYOND
-	if (GetAssetData()->TryGetNumberField(TEXT("TextureHeight"), TextureHeight)) {
+#if !UE4_27_ONLY_BELOW
+	if (AssetData->TryGetNumberField(TEXT("TextureHeight"), TextureHeight)) {
 		Object->TextureHeight = TextureHeight;
 	}
 #endif
@@ -82,15 +73,15 @@ bool ICurveLinearColorAtlasImporter::Import() {
 	FProperty* GradientCurvesProperty = FindFProperty<FProperty>(Object->GetClass(), "GradientCurves");
 	FPropertyChangedEvent PropertyChangedEvent(GradientCurvesProperty, EPropertyChangeType::ArrayAdd);
 
-	const TArray<TSharedPtr<FJsonValue>> GradientCurves = GetAssetData()->GetArrayField(TEXT("GradientCurves"));
+	const TArray<TSharedPtr<FJsonValue>> GradientCurves = AssetData->GetArrayField(TEXT("GradientCurves"));
 	TArray<TObjectPtr<UCurveLinearColor>> CurvesLocal;
 
 #if ENGINE_UE5
-	CurvesLocal = LoadExport(GradientCurves, CurvesLocal);
+	CurvesLocal = LoadObject(GradientCurves, CurvesLocal);
 	Object->GradientCurves = CurvesLocal;
 	Object->PostEditChangeProperty(PropertyChangedEvent);
 #else
-	CurvesLocal = LoadExport(GradientCurves, CurvesLocal);
+	CurvesLocal = LoadObject(GradientCurves, CurvesLocal);
 
 	/* Convert TObjectPtr<UCurveLinearColor> to UCurveLinearColor* and assign to Object->GradientCurves */
 	TArray<UCurveLinearColor*> RawCurves;

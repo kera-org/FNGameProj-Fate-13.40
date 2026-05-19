@@ -1,4 +1,4 @@
-﻿/* Copyright JsonAsAsset Contributors 2024-2026 */
+﻿/* Copyright JsonAsAsset Contributors 2024-2025 */
 
 #pragma once
 
@@ -7,19 +7,17 @@
 
 struct FTextureCreatorUtilities {
 public:
-	FTextureCreatorUtilities(const FString& AssetName, const FString& FilePath, UPackage* Package, const bool UseOctetStream)
-		: UseOctetStream(UseOctetStream), AssetName(AssetName), FilePath(FilePath), Package(Package)
+	FTextureCreatorUtilities(const FString& FileName, const FString& FilePath, UPackage* Package, 
+			  UPackage* OutermostPkg)
+		: FileName(FileName), FilePath(FilePath), Package(Package), OutermostPkg(OutermostPkg)
 	{
 		PropertySerializer = NewObject<UPropertySerializer>();
-		ObjectSerializer = NewObject<UObjectSerializer>();
+		GObjectSerializer = NewObject<UObjectSerializer>();
 
-		ObjectSerializer->SetPropertySerializer(PropertySerializer);
+		GObjectSerializer->SetPropertySerializer(PropertySerializer);
 	}
 
-	bool UseOctetStream = true;
-
-    template <class T = UObject>
-	bool CreateTexture(UTexture*& OutTexture, TArray<uint8>& Data, const TSharedPtr<FJsonObject>& Properties);
+	bool CreateTexture2D(UTexture*& OutTexture2D, TArray<uint8>& Data, const TSharedPtr<FJsonObject>& Properties) const;
 	bool CreateTextureCube(UTexture*& OutTextureCube, const TArray<uint8>& Data, const TSharedPtr<FJsonObject>& Properties) const;
 	bool CreateVolumeTexture(UTexture*& OutVolumeTexture, TArray<uint8>& Data, const TSharedPtr<FJsonObject>& Properties) const;
 	bool CreateRenderTarget2D(UTexture*& OutRenderTarget2D, const TSharedPtr<FJsonObject>& Properties) const;
@@ -27,18 +25,18 @@ public:
 	/* Deserialization functions */
 	bool DeserializeTexture2D(UTexture2D* InTexture2D, const TSharedPtr<FJsonObject>& Properties) const;
 	bool DeserializeTexture(UTexture* Texture, const TSharedPtr<FJsonObject>& Properties) const;
-	bool DeserializeTexturePlatformData(UTexture* Texture, TArray<uint8>& Data, FTexturePlatformData& TexturePlatformData, const TSharedPtr<FJsonObject>& Properties);
 
 private:
 	static void GetDecompressedTextureData(uint8* Data, uint8*& OutData, const int SizeX, const int SizeY, const int SizeZ, const int TotalSize, const EPixelFormat Format);
 
 protected:
-	FString AssetName;
+	FString FileName;
 	FString FilePath;
 	UPackage* Package;
+	UPackage* OutermostPkg;
 	UPropertySerializer* PropertySerializer;
-	UObjectSerializer* ObjectSerializer;
+	UObjectSerializer* GObjectSerializer;
 
 public:
-	FORCEINLINE UObjectSerializer* GetObjectSerializer() const { return ObjectSerializer; }
+	FORCEINLINE UObjectSerializer* GetObjectSerializer() const { return GObjectSerializer; }
 };

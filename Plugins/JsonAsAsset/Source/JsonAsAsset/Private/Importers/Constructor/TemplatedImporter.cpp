@@ -1,4 +1,4 @@
-﻿/* Copyright JsonAsAsset Contributors 2024-2026 */
+﻿/* Copyright JsonAsAsset Contributors 2024-2025 */
 
 #include "Importers/Constructor/TemplatedImporter.h"
 
@@ -6,22 +6,21 @@
 template class ITemplatedImporter<UObject>;
 
 template <typename AssetType>
-UObject* ITemplatedImporter<AssetType>::CreateAsset(UObject* CreatedAsset) {
-	return IImporter::CreateAsset(NewObject<AssetType>(GetPackage(), GetAssetClass() ? GetAssetClass() : AssetType::StaticClass(), FName(GetAssetName()), RF_Public | RF_Standalone));
-}
-
-template <typename AssetType>
 bool ITemplatedImporter<AssetType>::Import() {
-	AssetType* Asset = Create<AssetType>();
+	GetObjectSerializer()->SetPackageForDeserialization(Package);
+
+	AssetType* Asset = NewObject<AssetType>(Package, AssetClass ? AssetClass : AssetType::StaticClass(), FName(FileName), RF_Public | RF_Standalone);
 
 	Asset->MarkPackageDirty();
 
-	GetObjectSerializer()->SetExportForDeserialization(GetAssetExport(), Asset);
-	GetObjectSerializer()->Parent = Asset;
+	UObjectSerializer* ObjectSerializer = GetObjectSerializer();
+	ObjectSerializer->SetPackageForDeserialization(Package);
+	ObjectSerializer->SetExportForDeserialization(JsonObject);
+	ObjectSerializer->ParentAsset = Asset;
 
-	GetObjectSerializer()->DeserializeExports(AssetContainer.JsonObjects);
+	ObjectSerializer->DeserializeExports(AllJsonObjects);
 	
-	GetObjectSerializer()->DeserializeObjectProperties(GetAssetData(), Asset);
+	GetObjectSerializer()->DeserializeObjectProperties(AssetData, Asset);
 
 	return OnAssetCreation(Asset);
 }

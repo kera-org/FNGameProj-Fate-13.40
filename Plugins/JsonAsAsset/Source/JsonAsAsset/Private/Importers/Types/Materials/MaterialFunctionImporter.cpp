@@ -1,18 +1,12 @@
-/* Copyright JsonAsAsset Contributors 2024-2026 */
+/* Copyright JsonAsAsset Contributors 2024-2025 */
 
 #include "Importers/Types/Materials/MaterialFunctionImporter.h"
 #include "Factories/MaterialFunctionFactoryNew.h"
 
-UObject* IMaterialFunctionImporter::CreateAsset(UObject* CreatedAsset) {
+bool IMaterialFunctionImporter::Import() {
 	/* Create Material Function Factory (factory automatically creates the Material Function) */
 	UMaterialFunctionFactoryNew* MaterialFunctionFactory = NewObject<UMaterialFunctionFactoryNew>();
-	UMaterialFunction* MaterialFunction = Cast<UMaterialFunction>(MaterialFunctionFactory->FactoryCreateNew(UMaterialFunction::StaticClass(), GetPackage(), *GetAssetName(), RF_Standalone | RF_Public, nullptr, GWarn));
-
-	return IImporter::CreateAsset(MaterialFunction);
-}
-
-bool IMaterialFunctionImporter::Import() {
-	UMaterialFunction* MaterialFunction = Create<UMaterialFunction>();
+	UMaterialFunction* MaterialFunction = Cast<UMaterialFunction>(MaterialFunctionFactory->FactoryCreateNew(UMaterialFunction::StaticClass(), OutermostPkg, *FileName, RF_Standalone | RF_Public, nullptr, GWarn));
 
 	/* Empty all expressions, we create them */
 #if ENGINE_UE5
@@ -25,9 +19,9 @@ bool IMaterialFunctionImporter::Import() {
 	if (!OnAssetCreation(MaterialFunction)) return false;
 
 	/* Define editor only data from the JSON */
-	FUObjectExportContainer ExpressionContainer;
+	FMaterialExpressionNodeExportContainer ExpressionContainer;
 
-	const TSharedPtr<FJsonObject> Props = FindMaterialData(GetAssetType(), ExpressionContainer);
+	const TSharedPtr<FJsonObject> Props = FindMaterialData(MaterialFunction, JsonObject->GetStringField(TEXT("Type")), MaterialFunction->GetName(), ExpressionContainer);
 
 	/* Map out each expression for easier access */
 	ConstructExpressions(ExpressionContainer);
@@ -43,12 +37,12 @@ bool IMaterialFunctionImporter::Import() {
 	PropagateExpressions(ExpressionContainer);
 
 	/* Deserialize any properties */
-	GetObjectSerializer()->DeserializeObjectProperties(GetAssetData(), MaterialFunction);
+	GetObjectSerializer()->DeserializeObjectProperties(AssetData, MaterialFunction);
 	
 	MaterialFunction->PreEditChange(nullptr);
 	MaterialFunction->PostEditChange();
 
-	Save();
+	SavePackage();
 	
 	return true;
 }

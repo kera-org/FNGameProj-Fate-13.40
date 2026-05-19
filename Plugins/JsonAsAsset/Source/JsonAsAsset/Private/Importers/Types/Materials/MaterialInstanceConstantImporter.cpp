@@ -1,4 +1,4 @@
-/* Copyright JsonAsAsset Contributors 2024-2026 */
+/* Copyright JsonAsAsset Contributors 2024-2025 */
 
 #include "Importers/Types/Materials/MaterialInstanceConstantImporter.h"
 #include "Materials/MaterialInstanceConstant.h"
@@ -6,29 +6,10 @@
 #include "RHIDefinitions.h"
 #include "MaterialShared.h"
 
-UObject* IMaterialInstanceConstantImporter::CreateAsset(UObject* CreatedAsset) {
-	return IImporter::CreateAsset(NewObject<UMaterialInstanceConstant>(GetPackage(), UMaterialInstanceConstant::StaticClass(), *GetAssetName(), RF_Public | RF_Standalone));
-}
-
 bool IMaterialInstanceConstantImporter::Import() {
-	UMaterialInstanceConstant* MaterialInstanceConstant = Create<UMaterialInstanceConstant>();
+	UMaterialInstanceConstant* MaterialInstanceConstant = NewObject<UMaterialInstanceConstant>(Package, UMaterialInstanceConstant::StaticClass(), *FileName, RF_Public | RF_Standalone);
 
-	/* Specific fix for 4.16 engines */
-	const TArray<FString> ParameterFields = {
-		TEXT("ScalarParameterValues"),
-		TEXT("TextureParameterValues"),
-		TEXT("VectorParameterValues")
-	};
-
-	for (const FString& FieldName : ParameterFields) {
-		if (GetAssetData()->HasField(FieldName)) {
-			TArray<TSharedPtr<FJsonValue>> Params = GetAssetData()->GetArrayField(FieldName);
-			ConvertParameterNamesToInfos(Params);
-			GetAssetData()->SetArrayField(FieldName, Params);
-		}
-	}
-	
-	GetObjectSerializer()->DeserializeObjectProperties(RemovePropertiesShared(GetAssetData(),
+	GetObjectSerializer()->DeserializeObjectProperties(RemovePropertiesShared(AssetData,
 	{
 		"CachedReferencedTextures"
 	}), MaterialInstanceConstant);
@@ -37,20 +18,20 @@ bool IMaterialInstanceConstantImporter::Import() {
 	TArray<TSharedPtr<FJsonValue>> StaticComponentMaskParametersObjects;
 	
 	/* Optional Editor Data [contains static switch parameters] ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
-	FUObjectExport EditorOnlyData = AssetContainer.FindByType(FString("MaterialInstanceEditorOnlyData"));
+	const TSharedPtr<FJsonObject> EditorOnlyData = GetExport("MaterialInstanceEditorOnlyData", AllJsonObjects, true);
 
 	if (EditorOnlyData.IsValid()) {
-		if (EditorOnlyData.GetPropertiesNew().Has("StaticParameters")) {
-			ReadStaticParameters(EditorOnlyData.GetProperties()->GetObjectField(TEXT("StaticParameters")), StaticSwitchParametersObjects, StaticComponentMaskParametersObjects);
+		if (EditorOnlyData->HasField(TEXT("StaticParameters"))) {
+			ReadStaticParameters(EditorOnlyData->GetObjectField(TEXT("StaticParameters")), StaticSwitchParametersObjects, StaticComponentMaskParametersObjects);
 		}
 	}
 
 	/* Read from potential properties inside of asset data */
-	if (GetAssetData()->HasField(TEXT("StaticParametersRuntime"))) {
-		ReadStaticParameters(GetAssetData()->GetObjectField(TEXT("StaticParametersRuntime")), StaticSwitchParametersObjects, StaticComponentMaskParametersObjects);
+	if (AssetData->HasField(TEXT("StaticParametersRuntime"))) {
+		ReadStaticParameters(AssetData->GetObjectField(TEXT("StaticParametersRuntime")), StaticSwitchParametersObjects, StaticComponentMaskParametersObjects);
 	}
-	if (GetAssetData()->HasField(TEXT("StaticParameters"))) {
-		ReadStaticParameters(GetAssetData()->GetObjectField(TEXT("StaticParameters")), StaticSwitchParametersObjects, StaticComponentMaskParametersObjects);
+	if (AssetData->HasField(TEXT("StaticParameters"))) {
+		ReadStaticParameters(AssetData->GetObjectField(TEXT("StaticParameters")), StaticSwitchParametersObjects, StaticComponentMaskParametersObjects);
 	}
 
 	/* ~~~~~~~~~ STATIC PARAMETERS ~~~~~~~~~~~ */
@@ -138,38 +119,11 @@ bool IMaterialInstanceConstantImporter::Import() {
 }
 
 void IMaterialInstanceConstantImporter::ReadStaticParameters(const TSharedPtr<FJsonObject>& StaticParameters, TArray<TSharedPtr<FJsonValue>>& StaticSwitchParameters, TArray<TSharedPtr<FJsonValue>>& StaticComponentMaskParameters) {
-	if (StaticParameters->HasField(TEXT("StaticSwitchParameters"))) {
-		TArray<TSharedPtr<FJsonValue>> Params = StaticParameters->GetArrayField("StaticSwitchParameters");
-		ConvertParameterNamesToInfos(Params);
-		
-		for (TSharedPtr<FJsonValue> Parameter : Params) {
-			StaticSwitchParameters.Add(TSharedPtr<FJsonValue>(Parameter));
-		}
+	for (TSharedPtr<FJsonValue> Parameter : StaticParameters->GetArrayField(TEXT("StaticSwitchParameters"))) {
+		StaticSwitchParameters.Add(TSharedPtr<FJsonValue>(Parameter));
 	}
 
-	if (StaticParameters->HasField(TEXT("StaticComponentMaskParameters"))) {
-		TArray<TSharedPtr<FJsonValue>> Params = StaticParameters->GetArrayField("StaticComponentMaskParameters");
-		ConvertParameterNamesToInfos(Params);
-		
-		for (TSharedPtr<FJsonValue> Parameter : Params) {
-			StaticComponentMaskParameters.Add(TSharedPtr<FJsonValue>(Parameter));
-		}
-	}
-}
-
-void IMaterialInstanceConstantImporter::ConvertParameterNamesToInfos(TArray<TSharedPtr<FJsonValue>>& Input) {
-	/* Convert ParameterName to be inside ParameterInfo */
-	for (const TSharedPtr<FJsonValue>& Parameter : Input) {
-		const TSharedPtr<FJsonObject>& ParameterObject = Parameter->AsObject();
-
-		if (ParameterObject->HasField(TEXT("ParameterName"))) {
-			TSharedPtr<FJsonObject> ParameterInfo = MakeShared<FJsonObject>();
-			
-			ParameterInfo->SetStringField(TEXT("Name"), ParameterObject->GetStringField(TEXT("ParameterName")));
-			ParameterObject->SetObjectField("ParameterInfo", ParameterInfo);
-
-			/* Cleanup */
-			ParameterObject->RemoveField("ParameterName");
-		}
+	for (TSharedPtr<FJsonValue> Parameter : StaticParameters->GetArrayField(TEXT("StaticComponentMaskParameters"))) {
+		StaticComponentMaskParameters.Add(TSharedPtr<FJsonValue>(Parameter));
 	}
 }

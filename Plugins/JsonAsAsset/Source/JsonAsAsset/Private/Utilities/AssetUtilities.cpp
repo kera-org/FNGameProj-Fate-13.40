@@ -1,4 +1,4 @@
-/* Copyright JsonAsAsset Contributors 2024-2026 */
+/* Copyright JsonAsAsset Contributors 2024-2025 */
 
 #include "Utilities/AssetUtilities.h"
 
@@ -10,166 +10,138 @@
 #include "Sound/SoundNode.h"
 #include "Engine/SubsurfaceProfile.h"
 #include "Materials/MaterialParameterCollection.h"
+#include "Interfaces/IPluginManager.h"
+#include "Widgets/Notifications/SNotificationList.h"
+#include "Framework/Notifications/NotificationManager.h"
 #include "Settings/JsonAsAssetSettings.h"
 #include "Dom/JsonObject.h"
 
+#include "UObject/SavePackage.h"
+
 #include "HttpModule.h"
-#include "Importers/Constructor/ImportReader.h"
 #include "Interfaces/IHttpResponse.h"
-#include "Settings/Runtime.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
 #include "Utilities/RemoteUtilities.h"
+#include "PluginUtils.h"
 
 /* CreateAssetPackage Implementations ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
-UPackage* FAssetUtilities::CreateAssetPackage(const FString& Path) {
+UPackage* FAssetUtilities::CreateAssetPackage(const FString& FullPath) {
 	UPackage* Package = CreatePackage(
 		/* 4.25, 4.26.0 and below need an Outer */
 #if UE4_25_BELOW || (UE4_26_0)
 		nullptr, 
 #endif
-		*Path);
+		*FullPath);
 	Package->FullyLoad();
 
 	return Package;
 }
 
-UPackage* FAssetUtilities::CreateAssetPackage(const FString& Name, const FString& OutputPath, FString& FailureReason) {
-	const UJsonAsAssetSettings* Settings = GetSettings();
+UPackage* FAssetUtilities::CreateAssetPackage(const FString& Name, const FString& OutputPath, UPackage*& OutOutermostPkg) {
+	const UJsonAsAssetSettings* Settings = GetDefault<UJsonAsAssetSettings>();
 	
-	FString ModifiablePath = OutputPath;
-	
+	FString ModifiablePath;
+
 	/* References Automatically Formatted */
-	if (!ModifiablePath.StartsWith("/Game/") && !ModifiablePath.StartsWith("/Plugins/") && ModifiablePath.Contains("/Content/")) {
-		if (!Settings->AssetSettings.ProjectName.IsEmpty()) {
-			ModifiablePath = ModifiablePath.Replace(*(Settings->AssetSettings.ProjectName + "/Content"), TEXT("/Game"));
-			ModifiablePath.Split(*(GJsonAsAssetRuntime.ExportDirectory.Path + "/"), nullptr, &ModifiablePath, ESearchCase::IgnoreCase, ESearchDir::FromStart);
-			ModifiablePath.Split("/", &ModifiablePath, nullptr, ESearchCase::IgnoreCase, ESearchDir::FromEnd);
-			ModifiablePath += "/";
+	if (!OutputPath.StartsWith("/Game/") && !OutputPath.StartsWith("/Plugins/") && OutputPath.Contains("/Content/")) {
+		OutputPath.Split(*(Settings->ExportDirectory.Path + "/"), nullptr, &ModifiablePath, ESearchCase::IgnoreCase, ESearchDir::FromStart);
+		ModifiablePath.Split("/", nullptr, &ModifiablePath, ESearchCase::IgnoreCase, ESearchDir::FromStart);
+		ModifiablePath.Split("/", &ModifiablePath, nullptr, ESearchCase::IgnoreCase, ESearchDir::FromEnd);
+		/* Ex: RestPath: Plugins/Folder/BaseTextures */
+		/* Ex: RestPath: Content/SecondaryFolder */
+		bool bIsPlugin = ModifiablePath.StartsWith("Plugins");
+
+		/* Plugins/Folder/BaseTextures -> Folder/BaseTextures */
+		if (bIsPlugin) {
+			FString PluginName = ModifiablePath;
+			FString RemainingPath;
+			/* PluginName = TestName */
+			/* RemainingPath = SetupAssets/Materials */
+			ModifiablePath.Split("/Content/", &PluginName, &RemainingPath, ESearchCase::IgnoreCase, ESearchDir::FromStart);
+			PluginName.Split("/", nullptr, &PluginName, ESearchCase::IgnoreCase, ESearchDir::FromEnd);
+
+			/* /PluginName/Materials */
+			ModifiablePath = PluginName + "/" + RemainingPath;
 		}
-
-		if (!ModifiablePath.StartsWith("/Game/") && !ModifiablePath.StartsWith("/Plugins/") && ModifiablePath.Contains("/Content/")) {
-			ModifiablePath.Split(*(GJsonAsAssetRuntime.ExportDirectory.Path + "/"), nullptr, &ModifiablePath, ESearchCase::IgnoreCase, ESearchDir::FromStart);
-			ModifiablePath.Split("/", nullptr, &ModifiablePath, ESearchCase::IgnoreCase, ESearchDir::FromStart);
-			ModifiablePath.Split("/", &ModifiablePath, nullptr, ESearchCase::IgnoreCase, ESearchDir::FromEnd);
-			/* Ex: RestPath: Plugins/Folder/BaseTextures */
-			/* Ex: RestPath: Content/SecondaryFolder */
-			const bool IsPlugin = ModifiablePath.StartsWith("Plugins");
-
-			/* Plugins/Folder/BaseTextures -> Folder/BaseTextures */
-			if (IsPlugin) {
-				FString PluginName = ModifiablePath;
-				FString RemainingPath;
-				/* PluginName = TestName */
-				/* RemainingPath = SetupAssets/Materials */
-				ModifiablePath.Split("/Content/", &PluginName, &RemainingPath, ESearchCase::IgnoreCase, ESearchDir::FromStart);
-				PluginName.Split("/", nullptr, &PluginName, ESearchCase::IgnoreCase, ESearchDir::FromEnd);
-
-				/* /PluginName/Materials */
-				ModifiablePath = PluginName + "/" + RemainingPath;
-			}
-			/* Content/SecondaryFolder -> Game/SecondaryFolder */
-			else {
-				ModifiablePath = ModifiablePath.Replace(TEXT("Content"), TEXT("Game"));
-			}
-
-			ModifiablePath = "/" + ModifiablePath + "/";
-
-			FJRedirects::Redirect(ModifiablePath);
-
-			/* Check if plugin exists */
-			if (IsPlugin && !ModifiablePath.StartsWith("/Game/")) {
-				FString PluginName;
-				ModifiablePath.Split("/", nullptr, &PluginName, ESearchCase::IgnoreCase, ESearchDir::FromStart);
-				PluginName.Split("/", &PluginName, nullptr, ESearchCase::IgnoreCase, ESearchDir::FromStart);
-
-				if (GetPlugin(PluginName) == nullptr) {
-					CreatePlugin(PluginName);
-				}
-			}
-		}
+		/* Content/SecondaryFolder -> Game/SecondaryFolder */
 		else {
-			FJRedirects::Redirect(ModifiablePath);
+			ModifiablePath = ModifiablePath.Replace(TEXT("Content"), TEXT("Game"));
+		}
 
-			if (!ModifiablePath.StartsWith("/Game/") && !ModifiablePath.StartsWith("/Engine/")) {
-				FString PluginName;
-				ModifiablePath.Split("/", nullptr, &PluginName, ESearchCase::IgnoreCase, ESearchDir::FromStart);
-				PluginName.Split("/", &PluginName, nullptr, ESearchCase::IgnoreCase, ESearchDir::FromStart);
+		ModifiablePath = "/" + ModifiablePath + "/";
 
-				if (GetPlugin(PluginName) == nullptr) {
-					CreatePlugin(PluginName);
-				}
-			}
+		/* Check if plugin exists */
+		if (bIsPlugin) {
+			FString PluginName;
+			ModifiablePath.Split("/", nullptr, &PluginName, ESearchCase::IgnoreCase, ESearchDir::FromStart);
+			PluginName.Split("/", &PluginName, nullptr, ESearchCase::IgnoreCase, ESearchDir::FromStart);
+
+			if (IPluginManager::Get().FindPlugin(PluginName) == nullptr)
+				CreatePlugin(PluginName);
 		}
 	} else {
 		FString RootName; {
-			ModifiablePath.Split("/", nullptr, &RootName, ESearchCase::IgnoreCase, ESearchDir::FromStart);
+			OutputPath.Split("/", nullptr, &RootName, ESearchCase::IgnoreCase, ESearchDir::FromStart);
 			RootName.Split("/", &RootName, nullptr, ESearchCase::IgnoreCase, ESearchDir::FromStart);
 		}
 
-		if (RootName != "Game" && RootName != "Engine" && GetPlugin(RootName) == nullptr) {
+		if (RootName != "Game" && RootName != "Engine" && IPluginManager::Get().FindPlugin(RootName) == nullptr) {
 			CreatePlugin(RootName);
 		}
 
+		ModifiablePath = OutputPath;
 		ModifiablePath.Split("/", &ModifiablePath, nullptr, ESearchCase::IgnoreCase, ESearchDir::FromEnd);
 
 		ModifiablePath = ModifiablePath + "/";
-
-		FJRedirects::Redirect(ModifiablePath);
 	}
 
 	const FString PathWithGame = ModifiablePath + Name;
-
-	if (PathWithGame.Contains(TEXT("//"), ESearchCase::CaseSensitive) || PathWithGame == "None" || PathWithGame.IsEmpty()) {
-		FailureReason = "Attempted to create a package with name containing double slashes.\n\nUpdate your configuration to use a valid Export Directory.";
-		return nullptr;
-	}
-	
 	UPackage* Package = CreateAssetPackage(*PathWithGame);
+	OutOutermostPkg = Package->GetOutermost();
 	Package->FullyLoad();
 
 	return Package;
 }
 
 UPackage* FAssetUtilities::CreateAssetPackage(const FString& Name, const FString& OutputPath) {
-	FString StringIgnore = "";
+	UPackage* Ignore = nullptr; /* Put here because &nullptr doesn't work */
 	
-	return CreateAssetPackage(Name, OutputPath, StringIgnore);
+	return CreateAssetPackage(Name, OutputPath, Ignore);
 }
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
-template bool FAssetUtilities::ConstructAsset<UMaterialInterface>(const FString& Path, const FString& RealPath, const FString& Type, TObjectPtr<UMaterialInterface>& OutObject, bool& bSuccess);
-template bool FAssetUtilities::ConstructAsset<USubsurfaceProfile>(const FString& Path, const FString& RealPath, const FString& Type, TObjectPtr<USubsurfaceProfile>& OutObject, bool& bSuccess);
-template bool FAssetUtilities::ConstructAsset<UTexture>(const FString& Path, const FString& RealPath, const FString& Type, TObjectPtr<UTexture>& OutObject, bool& bSuccess);
-template bool FAssetUtilities::ConstructAsset<UAnimSequence>(const FString& Path, const FString& RealPath, const FString& Type, TObjectPtr<UAnimSequence>& OutObject, bool& bSuccess);
-template bool FAssetUtilities::ConstructAsset<UMaterialParameterCollection>(const FString& Path, const FString& RealPath, const FString& Type, TObjectPtr<UMaterialParameterCollection>& OutObject, bool& bSuccess);
-template bool FAssetUtilities::ConstructAsset<USoundWave>(const FString& Path, const FString& RealPath, const FString& Type, TObjectPtr<USoundWave>& OutObject, bool& bSuccess);
-template bool FAssetUtilities::ConstructAsset<UObject>(const FString& Path, const FString& RealPath, const FString& Type, TObjectPtr<UObject>& OutObject, bool& bSuccess);
-template bool FAssetUtilities::ConstructAsset<UMaterialFunctionInterface>(const FString& Path, const FString& RealPath, const FString& Type, TObjectPtr<UMaterialFunctionInterface>& OutObject, bool& bSuccess);
-template bool FAssetUtilities::ConstructAsset<USoundNode>(const FString& Path, const FString& RealPath, const FString& Type, TObjectPtr<USoundNode>& OutObject, bool& bSuccess);
-template bool FAssetUtilities::ConstructAsset<UCurveLinearColor>(const FString& Path, const FString& RealPath, const FString& Type, TObjectPtr<UCurveLinearColor>& OutObject, bool& bSuccess);
-template bool FAssetUtilities::ConstructAsset<UTextureLightProfile>(const FString&, const FString&, const FString&, TObjectPtr<UTextureLightProfile>&, bool&);
+template bool FAssetUtilities::ConstructAsset<UMaterialInterface>(const FString& Path, const FString& Type, TObjectPtr<UMaterialInterface>& OutObject, bool& bSuccess);
+template bool FAssetUtilities::ConstructAsset<USubsurfaceProfile>(const FString& Path, const FString& Type, TObjectPtr<USubsurfaceProfile>& OutObject, bool& bSuccess);
+template bool FAssetUtilities::ConstructAsset<UTexture>(const FString& Path, const FString& Type, TObjectPtr<UTexture>& OutObject, bool& bSuccess);
+template bool FAssetUtilities::ConstructAsset<UAnimSequence>(const FString& Path, const FString& Type, TObjectPtr<UAnimSequence>& OutObject, bool& bSuccess);
+template bool FAssetUtilities::ConstructAsset<UMaterialParameterCollection>(const FString& Path, const FString& Type, TObjectPtr<UMaterialParameterCollection>& OutObject, bool& bSuccess);
+template bool FAssetUtilities::ConstructAsset<USoundWave>(const FString& Path, const FString& Type, TObjectPtr<USoundWave>& OutObject, bool& bSuccess);
+template bool FAssetUtilities::ConstructAsset<UObject>(const FString& Path, const FString& Type, TObjectPtr<UObject>& OutObject, bool& bSuccess);
+template bool FAssetUtilities::ConstructAsset<UMaterialFunctionInterface>(const FString& Path, const FString& Type, TObjectPtr<UMaterialFunctionInterface>& OutObject, bool& bSuccess);
+template bool FAssetUtilities::ConstructAsset<USoundNode>(const FString& Path, const FString& Type, TObjectPtr<USoundNode>& OutObject, bool& bSuccess);
+template bool FAssetUtilities::ConstructAsset<UCurveLinearColor>(const FString& Path, const FString& Type, TObjectPtr<UCurveLinearColor>& OutObject, bool& bSuccess);
 
-/* Importing assets from Cloud */
+/* Importing assets from Local Fetch */
 template <typename T>
-bool FAssetUtilities::ConstructAsset(const FString& Path, const FString& RealPath, const FString& Type, TObjectPtr<T>& OutObject, bool& bSuccess) {
-	if (Type.IsEmpty()) {
+bool FAssetUtilities::ConstructAsset(const FString& Path, const FString& Type, TObjectPtr<T>& OutObject, bool& bSuccess) {
+	/* Skip if no type provided */
+	if (Type == "") {
 		return false;
 	}
 
-	/* Supported Texture Classes */
-	const bool IsTexture = Type ==
-		"Texture2D" ||
-		Type == "TextureRenderTarget2D" ||
-		Type == "TextureCube" ||
-		Type == "VolumeTexture" ||
-		Type == "TextureLightProfile";
-
-	FString GamePath = Path;
+	/* Manually handled asset types */
+	const bool bIsTexture = Type ==
+			"Texture2D" ||
+			Type == "TextureRenderTarget2D" ||
+			Type == "TextureCube" ||
+			Type == "VolumeTexture";
 
 	/* Supported Assets */
-	if (CanImport(Type, true) || IsTexture) {
-		if (IsTexture) {
+	if (IImporter::CanImport(Type, true) || bIsTexture) {
+		if (bIsTexture) {
 			UTexture* Texture;
-			const FString NewPath = RealPath;
+			FString NewPath = Path;
 
 			FString RootName; {
 				NewPath.Split("/", nullptr, &RootName, ESearchCase::IgnoreCase, ESearchDir::FromStart);
@@ -177,7 +149,7 @@ bool FAssetUtilities::ConstructAsset(const FString& Path, const FString& RealPat
 			}
 
 			/* Missing Plugin: Create it */
-			if (RootName != "Game" && RootName != "Engine" && GetPlugin(RootName) == nullptr) {
+			if (RootName != "Game" && RootName != "Engine" && IPluginManager::Get().FindPlugin(RootName) == nullptr) {
 				CreatePlugin(RootName);
 			}
 
@@ -187,39 +159,36 @@ bool FAssetUtilities::ConstructAsset(const FString& Path, const FString& RealPat
 			return true;
 		}
 		
-		const TSharedPtr<FJsonObject> Response = Cloud::Export::GetRaw(Path);
+		const TSharedPtr<FJsonObject> Response = API_RequestExports(Path);
 		if (Response == nullptr || Path.IsEmpty()) return true;
 
 		if (Response->HasField(TEXT("errored"))) {
-			UE_LOG(LogJsonAsAsset, Log, TEXT("Error from response \"%s\""), *Path);
+			UE_LOG(LogJson, Log, TEXT("Error from response \"%s\""), *Path);
 			return true;
 		}
 
-		const TSharedPtr<FJsonObject> JsonObject = Response->GetArrayField(TEXT("exports"))[0]->AsObject();
+		TSharedPtr<FJsonObject> JsonObject = Response->GetArrayField(TEXT("jsonOutput"))[0]->AsObject();
 		FString PackagePath;
 		FString AssetName;
-		RealPath.Split(".", &PackagePath, &AssetName);
+		Path.Split(".", &PackagePath, &AssetName);
 
 		if (JsonObject) {
-			const FString NewPath = PackagePath;
+			FString NewPath = PackagePath;
 
 			FString RootName; {
 				NewPath.Split("/", nullptr, &RootName, ESearchCase::IgnoreCase, ESearchDir::FromStart);
 				RootName.Split("/", &RootName, nullptr, ESearchCase::IgnoreCase, ESearchDir::FromStart);
 			}
 
-			if (RootName != "Game" && RootName != "Engine" && GetPlugin(RootName) == nullptr) {
+			if (RootName != "Game" && RootName != "Engine" && IPluginManager::Get().FindPlugin(RootName) == nullptr) {
 				CreatePlugin(RootName);
 			}
 
-			IImporter* OutImporter;
-			bSuccess = IImportReader::ReadExportsAndImport(Response->GetArrayField(TEXT("exports")), PackagePath, OutImporter, true);
+			/* Import asset by IImporter */
+			bSuccess = IImporter::ReadExportsAndImport(Response->GetArrayField(TEXT("jsonOutput")), PackagePath, true);
 
 			/* Define found object */
-			FString RedirectedPath = RealPath;
-			
-			FJRedirects::Redirect(RedirectedPath);
-			OutObject = Cast<T>(StaticLoadObject(T::StaticClass(), nullptr, *RedirectedPath));
+			OutObject = Cast<T>(StaticLoadObject(T::StaticClass(), nullptr, *Path));
 
 			return OutObject != nullptr;
 		}
@@ -228,59 +197,45 @@ bool FAssetUtilities::ConstructAsset(const FString& Path, const FString& RealPat
 	return false;
 }
 
-bool FAssetUtilities::Construct_TypeTexture(const FString& Path, const FString& FetchPath, UTexture*& OutTexture) {
+bool FAssetUtilities::Construct_TypeTexture(const FString& Path, const FString& RealPath, UTexture*& OutTexture) {
 	if (Path.IsEmpty()) {
 		return false;
 	}
 
-	const TSharedPtr<FJsonObject> JsonObject = Cloud::Export::GetRaw(FetchPath);
+	TSharedPtr<FJsonObject> JsonObject = API_RequestExports(RealPath);
 	if (JsonObject == nullptr) {
 		return false;
 	}
 
-	TArray<TSharedPtr<FJsonValue>> Response = JsonObject->GetArrayField(TEXT("exports"));
+	TArray<TSharedPtr<FJsonValue>> Response = JsonObject->GetArrayField(TEXT("jsonOutput"));
 	if (Response.Num() == 0) {
 		return false;
 	}
 
-	const TSharedPtr<FJsonObject> JsonExport = Response[0]->AsObject();
-	const FString Type = JsonExport->GetStringField(TEXT("Type"));
-
-	bool IsVectorDisplacementMap = false;
-
-	if (JsonExport->HasField(TEXT("Properties"))) {
-		if (JsonExport->GetObjectField(TEXT("Properties"))->HasField(TEXT("CompressionSettings"))) {
-			IsVectorDisplacementMap =
-				JsonExport->GetObjectField(TEXT("Properties"))->GetStringField(TEXT("CompressionSettings")).Contains("TC_VectorDisplacementmap")
-				|| JsonExport->GetObjectField(TEXT("Properties"))->GetStringField(TEXT("CompressionSettings")).Contains("TC_HDR");
-		}
-	}
-	
+	const UJsonAsAssetSettings* Settings = GetDefault<UJsonAsAssetSettings>();
+	TSharedPtr<FJsonObject> JsonExport = Response[0]->AsObject();
+	FString Type = JsonExport->GetStringField(TEXT("Type"));
+	UTexture* Texture = nullptr;
 	TArray<uint8> Data = TArray<uint8>();
-	bool UseOctetStream = Type == "TextureLightProfile"
-	                       || Type == "TextureCube"
-	                       || Type == "VolumeTexture"
-	                       || Type == "TextureRenderTarget2D" || IsVectorDisplacementMap;
-
-#if UE4_26_BELOW
-	UseOctetStream = true;
-#endif
-
-#if UE5_5_BEYOND
-	UseOctetStream = true;
-#endif
 
 	/* ~~~~~~~~~~~~~~~ Download Texture Data ~~~~~~~~~~~~ */
 	if (Type != "TextureRenderTarget2D") {
 		FHttpModule* HttpModule = &FHttpModule::Get();
-		const auto HttpRequest = HttpModule->CreateRequest();
+#if ENGINE_UE5
+		const TSharedRef<IHttpRequest> HttpRequest = HttpModule->CreateRequest();
+#else
+		const TSharedRef<IHttpRequest, ESPMode::ThreadSafe> HttpRequest = HttpModule->CreateRequest();
+#endif
 
-		HttpRequest->SetURL(Cloud::URL + "/api/export?path=" + FetchPath);
-		HttpRequest->SetHeader("content-type", UseOctetStream ? "application/octet-stream" : "image/png");
+		HttpRequest->SetURL(Settings->LocalFetchUrl + "/api/export?path=" + RealPath);
+		HttpRequest->SetHeader("content-type", "application/octet-stream");
 		HttpRequest->SetVerb(TEXT("GET"));
-		
-		const auto HttpResponse = FRemoteUtilities::ExecuteRequestSync(HttpRequest);
 
+#if ENGINE_UE5
+		const TSharedPtr<IHttpResponse> HttpResponse = FRemoteUtilities::ExecuteRequestSync(HttpRequest);
+#else
+		const TSharedPtr<IHttpResponse, ESPMode::ThreadSafe> HttpResponse = FRemoteUtilities::ExecuteRequestSync(HttpRequest);
+#endif
 		if (!HttpResponse.IsValid() || HttpResponse->GetResponseCode() != 200)
 			return false;
 
@@ -294,62 +249,19 @@ bool FAssetUtilities::Construct_TypeTexture(const FString& Path, const FString& 
 		}
 	}
 
-	return Fast_Construct_TypeTexture(JsonExport, Path, Type, Data, OutTexture);
-}
-
-bool FAssetUtilities::Fast_Construct_TypeTexture(const TSharedPtr<FJsonObject>& JsonExport, const FString& Path, const FString& Type, TArray<uint8> Data, UTexture*& OutTexture) {
-	const UJsonAsAssetSettings* Settings = GetSettings();
-	UTexture* Texture = nullptr;
-	
 	FString PackagePath;
 	FString AssetName; {
 		Path.Split(".", &PackagePath, &AssetName);
 	}
 
-	bool IsVectorDisplacementMap = false;
-
-	if (JsonExport->HasField(TEXT("Properties"))) {
-		if (JsonExport->GetObjectField(TEXT("Properties"))->HasField(TEXT("CompressionSettings"))) {
-			IsVectorDisplacementMap = JsonExport->GetObjectField(TEXT("Properties"))->GetStringField(TEXT("CompressionSettings")).Contains("TC_VectorDisplacementmap")
-				|| JsonExport->GetObjectField(TEXT("Properties"))->GetStringField(TEXT("CompressionSettings")).Contains("TC_HDR");
-		}
-	}
-	
-	bool UseOctetStream = Type == "TextureLightProfile"
-						   || Type == "TextureCube"
-						   || Type == "VolumeTexture"
-						   || Type == "TextureRenderTarget2D" || IsVectorDisplacementMap;
-
-#if UE4_26_BELOW
-	UseOctetStream = true;
-#endif
-
-#if UE5_5_BEYOND
-	UseOctetStream = true;
-#endif
-	
-	FJRedirects::Redirect(PackagePath);
-
-	if (!PackagePath.StartsWith("/Game/") && !PackagePath.StartsWith("/Engine/")) {
-		FString PluginName;
-		PackagePath.Split("/", nullptr, &PluginName, ESearchCase::IgnoreCase, ESearchDir::FromStart);
-		PluginName.Split("/", &PluginName, nullptr, ESearchCase::IgnoreCase, ESearchDir::FromStart);
-
-		if (GetPlugin(PluginName) == nullptr) {
-			CreatePlugin(PluginName);
-		}
-	}
-	
 	UPackage* Package = CreateAssetPackage(*PackagePath);
+	UPackage* OutermostPkg = Package->GetOutermost();
 	Package->FullyLoad();
 
-	FTextureCreatorUtilities TextureCreator = FTextureCreatorUtilities(AssetName, Path, Package, UseOctetStream);
+	FTextureCreatorUtilities TextureCreator = FTextureCreatorUtilities(AssetName, Path, Package, OutermostPkg);
 
 	if (Type == "Texture2D") {
-		TextureCreator.CreateTexture<UTexture2D>(Texture, Data, JsonExport);
-	}
-	if (Type == "TextureLightProfile") {
-		TextureCreator.CreateTexture<UTextureLightProfile>(Texture, Data, JsonExport);
+		TextureCreator.CreateTexture2D(Texture, Data, JsonExport);
 	}
 	if (Type == "TextureCube") {
 		TextureCreator.CreateTextureCube(Texture, Data, JsonExport);
@@ -376,11 +288,61 @@ bool FAssetUtilities::Fast_Construct_TypeTexture(const TSharedPtr<FJsonObject>& 
 	Package->FullyLoad();
 
 	/* Save texture */
-	if (Settings->AssetSettings.SaveAssets) {
-		SavePackage(Package);
+	if (Settings->AssetSettings.bSavePackagesOnImport) {
+		const FString PackageName = Package->GetName();
+		const FString PackageFileName = FPackageName::LongPackageNameToFilename(PackageName, FPackageName::GetAssetPackageExtension());
+#if ENGINE_UE5
+		FSavePackageArgs SaveArgs; {
+			SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
+			SaveArgs.SaveFlags = SAVE_NoError;
+		}
+		
+		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
+#else
+		UPackage::SavePackage(Package, nullptr, RF_Standalone, *PackageFileName);
+#endif
 	}
 
 	OutTexture = Texture;
 
 	return true;
+}
+
+TSharedPtr<FJsonObject> FAssetUtilities::API_RequestExports(const FString& Path, const FString& FetchPath) {
+	FHttpModule* HttpModule = &FHttpModule::Get();
+
+#if ENGINE_UE5
+	const TSharedRef<IHttpRequest> HttpRequest = HttpModule->CreateRequest();
+#else
+	const TSharedRef<IHttpRequest, ESPMode::ThreadSafe> HttpRequest = HttpModule->CreateRequest();
+#endif
+
+	FString PackagePath;
+	FString AssetName;
+	Path.Split(".", &PackagePath, &AssetName);
+
+	const UJsonAsAssetSettings* Settings = GetDefault<UJsonAsAssetSettings>();
+
+#if ENGINE_UE5
+	const TSharedRef<IHttpRequest> NewRequest = HttpModule->CreateRequest();
+#else
+	const TSharedRef<IHttpRequest, ESPMode::ThreadSafe> NewRequest = HttpModule->CreateRequest();
+#endif
+	NewRequest->SetURL(Settings->LocalFetchUrl + FetchPath + Path);
+	NewRequest->SetVerb(TEXT("GET"));
+
+#if ENGINE_UE5
+	const TSharedPtr<IHttpResponse> NewResponse = FRemoteUtilities::ExecuteRequestSync(NewRequest);
+#else
+	const TSharedPtr<IHttpResponse, ESPMode::ThreadSafe> NewResponse = FRemoteUtilities::ExecuteRequestSync(NewRequest);
+#endif
+	if (!NewResponse.IsValid()) return TSharedPtr<FJsonObject>();
+
+	const TSharedRef<TJsonReader<>> JsonReader = TJsonReaderFactory<>::Create(NewResponse->GetContentAsString());
+	TSharedPtr<FJsonObject> JsonObject;
+	if (FJsonSerializer::Deserialize(JsonReader, JsonObject)) {
+		return JsonObject;
+	}
+
+	return TSharedPtr<FJsonObject>();
 }

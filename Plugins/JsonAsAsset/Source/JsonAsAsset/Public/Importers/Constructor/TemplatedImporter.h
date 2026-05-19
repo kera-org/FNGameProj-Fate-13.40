@@ -1,4 +1,4 @@
-﻿/* Copyright JsonAsAsset Contributors 2024-2026 */
+﻿/* Copyright JsonAsAsset Contributors 2024-2025 */
 
 #pragma once
 
@@ -8,6 +8,9 @@
 template <typename AssetType>
 class ITemplatedImporter : public IImporter {
 public:
-	virtual UObject* CreateAsset(UObject* CreatedAsset) override;
+	ITemplatedImporter(const FString& FileName, const FString& FilePath, const TSharedPtr<FJsonObject>& JsonObject, UPackage* Package, UPackage* OutermostPkg, const TArray<TSharedPtr<FJsonValue>>& AllJsonObjects, UClass* AssetClass):
+		IImporter(FileName, FilePath, JsonObject, Package, OutermostPkg, AllJsonObjects, AssetClass) {
+	}
+
 	virtual bool Import() override;
 };
